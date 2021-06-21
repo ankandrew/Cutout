@@ -22,6 +22,8 @@ from util.cutout import Cutout
 from model.resnet import ResNet18
 from model.wide_resnet import WideResNet
 
+from ols import *
+
 model_options = ['resnet18', 'wideresnet']
 dataset_options = ['cifar10', 'cifar100', 'svhn']
 
@@ -48,6 +50,15 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
 parser.add_argument('--seed', type=int, default=0,
                     help='random seed (default: 1)')
+# for custom LS/OLS loss
+parser.add_argument('--loss', choices=['ce', 'ls', 'ols'], required=True, help='Loss fn to use')
+parser.add_argument('--alpha', type=float, required=False, default=0.5, help='Alpha for ols')
+parser.add_argument('--smooth', type=float, required=False, default=0.1,
+                    help='Initial smoothing for 1st epoch for ols')
+parser.add_argument('--decay_a', type=float, required=False, default=0.0,
+                    help='Decrease to the alpha balancing term.')
+parser.add_argument('--decay_n', type=int, required=False, default=1,
+                    help='Every n epochs apply hard_decay_factor.')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -152,7 +163,17 @@ elif args.model == 'wideresnet':
                          dropRate=0.3)
 
 cnn = cnn.cuda()
-criterion = nn.CrossEntropyLoss().cuda()
+if args.loss == 'ce':
+    criterion = nn.CrossEntropyLoss()
+elif args.loss == 'ls':
+    criterion = LabelSmoothingLoss(classes=len(num_classes), smoothing=args.smooth)
+    print(f'{"#" * 10}LS{"#" * 10}\nsmoothing={args.smooth}\n{"#" * 30}')
+else:
+    criterion = OnlineLabelSmoothing(alpha=args.alpha, n_classes=len(num_classes), smoothing=args.smooth,
+                                     hard_decay_factor=args.decay_a, hard_decay_epochs=args.decay_n)
+    print(f'{"#" * 11}OLS{"#" * 11}\nalpha={args.alpha}, smoothing={args.smooth}\n{"#" * 30}')
+    criterion = criterion.cuda()
+
 cnn_optimizer = torch.optim.SGD(cnn.parameters(), lr=args.learning_rate,
                                 momentum=0.9, nesterov=True, weight_decay=5e-4)
 
@@ -167,6 +188,8 @@ csv_logger = CSVLogger(args=args, fieldnames=['epoch', 'train_acc', 'test_acc'],
 
 def test(loader):
     cnn.eval()    # Change model to 'eval' mode (BN uses moving mean/var).
+    if isinstance(criterion, OnlineLabelSmoothing):
+        criterion.eval()
     correct = 0.
     total = 0.
     for images, labels in loader:
@@ -201,6 +224,8 @@ for epoch in range(args.epochs):
         cnn.zero_grad()
         pred = cnn(images)
 
+        if isinstance(criterion, OnlineLabelSmoothing):
+            criterion.train()
         xentropy_loss = criterion(pred, labels)
         xentropy_loss.backward()
         cnn_optimizer.step()
@@ -226,5 +251,7 @@ for epoch in range(args.epochs):
     row = {'epoch': str(epoch), 'train_acc': str(accuracy), 'test_acc': str(test_acc)}
     csv_logger.writerow(row)
 
+    if isinstance(criterion, OnlineLabelSmoothing):
+        criterion.next_epoch()
 torch.save(cnn.state_dict(), 'checkpoints/' + test_id + '.pt')
 csv_logger.close()
