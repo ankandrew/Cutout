@@ -166,10 +166,10 @@ cnn = cnn.cuda()
 if args.loss == 'ce':
     criterion = nn.CrossEntropyLoss()
 elif args.loss == 'ls':
-    criterion = LabelSmoothingLoss(classes=len(num_classes), smoothing=args.smooth)
+    criterion = LabelSmoothingLoss(classes=num_classes, smoothing=args.smooth)
     print(f'{"#" * 10}LS{"#" * 10}\nsmoothing={args.smooth}\n{"#" * 30}')
 else:
-    criterion = OnlineLabelSmoothing(alpha=args.alpha, n_classes=len(num_classes), smoothing=args.smooth,
+    criterion = OnlineLabelSmoothing(alpha=args.alpha, n_classes=num_classes, smoothing=args.smooth,
                                      hard_decay_factor=args.decay_a, hard_decay_epochs=args.decay_n)
     print(f'{"#" * 11}OLS{"#" * 11}\nalpha={args.alpha}, smoothing={args.smooth}\n{"#" * 30}')
     criterion = criterion.cuda()
