@@ -143,13 +143,13 @@ elif args.dataset == 'svhn':
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=args.batch_size,
                                            shuffle=True,
-                                           pin_memory=True,
+                                           pin_memory=False,
                                            num_workers=2)
 
 test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                           batch_size=args.batch_size,
                                           shuffle=False,
-                                          pin_memory=True,
+                                          pin_memory=False,
                                           num_workers=2)
 
 if args.model == 'resnet18':
